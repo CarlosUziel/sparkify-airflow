@@ -3,18 +3,30 @@
 # airflow needs a home, ~/airflow is the default,
 # but you can lay foundation somewhere else if you prefer
 # (optional)
-export AIRFLOW_HOME=~/airflow
-export AIRFLOW__CORE__DAGS_FOLDER=$(pwd)/src/dags
+AIRFLOW_HOME=$(pwd)/_airflow
+export AIRFLOW_HOME
+
+AIRFLOW__CORE__DAGS_FOLDER=$(pwd)/src/dags
+export AIRFLOW__CORE__DAGS_FOLDER
+
+AIRFLOW__CORE__PLUGINS_FOLDER=$(pwd)/src/plugins
+export AIRFLOW__CORE__PLUGINS_FOLDER
+
+AIRFLOW__CORE__LOAD_EXAMPLES=False
+export AIRFLOW__CORE__LOAD_EXAMPLES
 
 # initialize the database
-airflow db init
-
-airflow users create \
---username admin \
---firstname Jon \
---lastname Snow \
---role Admin \
---email john@snow.org
+if [ ! -d "$AIRFLOW_HOME" ]
+then
+    airflow db init
+    
+    airflow users create \
+    --username admin \
+    --firstname Jon \
+    --lastname Snow \
+    --role Admin \
+    --email john@snow.org
+fi
 
 # start the web server, default port is 8080
 airflow webserver --daemon --port 8080
