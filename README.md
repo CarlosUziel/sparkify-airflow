@@ -174,7 +174,7 @@ mamba activate sparkify_airflow
 **Create cluster:**
 
   1. Fill the `dwh.cfg` configuration file. These are the basic parameters that will be used to operate on AWS. More concretely, `GENERAL` covers general parameters, `DWH` includes the necessary information to create and connect to the Redshift cluster and S3 contains information on where to find the source dataset for this project. *This file is already filled with example values*.
-  2. To create the Redshift cluster, either run the `create_dwh.py` python script or follow along the notebook `notebooks/main.ipynb`.
+  2. To create the Redshift cluster, either run the `setup.py` python script or follow along the notebook `notebooks/main.ipynb`.
 
 <span style="color:red;font-weight:bold">DO NOT FORGET TO TERMINATE YOUR CLUSTER WHEN FINISHED WORKING ON THE PROJECT TO AVOID UNWANTED COSTS!</span>
 
