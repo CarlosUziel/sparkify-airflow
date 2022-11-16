@@ -177,6 +177,7 @@ def get_db_connection(dwh_config: ConfigParser):
 
 
 def register_connection(**kwargs):
+    """Register Airflow connection"""
     conn = Connection(**kwargs)
     session = settings.Session()
     session.add(conn)
