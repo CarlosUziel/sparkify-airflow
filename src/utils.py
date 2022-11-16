@@ -1,9 +1,12 @@
+import logging
 from configparser import ConfigParser
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict
 
 import boto3
 import psycopg2
+from airflow import settings
+from airflow.models import Connection
 
 
 def process_config(config_path: Path) -> ConfigParser:
@@ -18,6 +21,92 @@ def process_config(config_path: Path) -> ConfigParser:
         config.read_file(fp)
 
     return config
+
+
+def create_attach_role(iam_client: Any, dwh_config: ConfigParser) -> str:
+    """Create an IAM Role that makes Redshift able to access S3 bucket (ReadOnly)
+
+    Args:
+        iam_client: client to access AWS IAM service.
+        dwh_config: a ConfigParser containing necessary parameters.
+    """
+    # 1. Create the role
+    try:
+        iam_client.create_role(
+            Path="/",
+            RoleName=dwh_config.get("DWH", "DWH_IAM_ROLE_NAME"),
+            Description="Allows Redshift clusters to call AWS services on your behalf.",
+            AssumeRolePolicyDocument=json.dumps(
+                {
+                    "Statement": [
+                        {
+                            "Action": "sts:AssumeRole",
+                            "Effect": "Allow",
+                            "Principal": {"Service": "redshift.amazonaws.com"},
+                        }
+                    ],
+                    "Version": "2012-10-17",
+                }
+            ),
+        )
+    except Exception as e:
+        logging.warn(e)
+
+    # 2. Attach role
+    iam_client.attach_role_policy(
+        RoleName=dwh_config.get("DWH", "DWH_IAM_ROLE_NAME"),
+        PolicyArn="arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+    )["ResponseMetadata"]["HTTPStatusCode"]
+
+    # 3. Return IAM role ARN
+    return iam_client.get_role(RoleName=dwh_config.get("DWH", "DWH_IAM_ROLE_NAME"))[
+        "Role"
+    ]["Arn"]
+
+
+def create_redshift_cluster(
+    redshift_client: Any, dwh_config: ConfigParser, iamArn: str
+) -> Dict:
+    """Create a Redshift cluster with given parameters and appropiate role.
+
+    Args:
+        iam_client: client to access AWS Redshift service.
+        dwh_config: a ConfigParser containing necessary parameters.
+        iamArn: IAM role.
+    """
+    # 1. Create cluster
+    try:
+        redshift_client.create_cluster(
+            # HW
+            ClusterType=dwh_config.get("DWH", "DWH_CLUSTER_TYPE"),
+            NodeType=dwh_config.get("DWH", "DWH_NODE_TYPE"),
+            NumberOfNodes=int(dwh_config.get("DWH", "DWH_NUM_NODES")),
+            # Identifiers & Credentials
+            DBName=dwh_config.get("DWH", "DWH_DB"),
+            ClusterIdentifier=dwh_config.get("DWH", "DWH_CLUSTER_IDENTIFIER"),
+            MasterUsername=dwh_config.get("DWH", "DWH_DB_USER"),
+            MasterUserPassword=dwh_config.get("DWH", "DWH_DB_PASSWORD"),
+            # Roles (for s3 access)
+            IamRoles=[iamArn],
+        )
+
+    except Exception as e:
+        logging.error(e)
+
+    # 2. Wait for cluster to be available
+    logging.info("Waiting for Redshift cluster to become available...")
+    while True:
+        cluster_props = redshift_client.describe_clusters(
+            ClusterIdentifier=dwh_config.get("DWH", "DWH_CLUSTER_IDENTIFIER")
+        )["Clusters"][0]
+
+        if cluster_props["ClusterStatus"] == "available":
+            break
+        else:
+            sleep(30)
+    logging.info("Redshift cluster is ready to be used!")
+
+    return cluster_props, redshift_client
 
 
 def open_db_port(user_config: ConfigParser, dwh_config: ConfigParser):
@@ -85,3 +174,10 @@ def get_db_connection(dwh_config: ConfigParser):
     )
     cur = conn.cursor()
     return conn, cur
+
+
+def register_connection(**kwargs):
+    conn = Connection(**kwargs)
+    session = settings.Session()
+    session.add(conn)
+    session.commit()
