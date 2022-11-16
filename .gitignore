@@ -144,3 +144,6 @@ dmypy.json
 
 # AWS user credentials
 _user.cfg
+
+# Airflow server
+_airflow
