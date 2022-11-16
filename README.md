@@ -29,34 +29,34 @@
 
 # Sparkify (using Apache Airflow)
 
-A project from the [Data Engineer Nanodegree Program at Udacity](https://www.udacity.com/course/data-engineer-nanodegree--nd027) to practice data lakes on the cloud using Spark and AWS services.
+A project from the [Data Engineer Nanodegree Program at Udacity](https://www.udacity.com/course/data-engineer-nanodegree--nd027) to practice data pipelines using Apache Airflow as well as S3 buckets and Amazon Redshift.
 
 ## About The Project
 
 ### Premise
 
-> A music streaming startup, Sparkify, has grown their user base and song database even more and want to move their data warehouse to a data lake. Their data resides in S3, in a directory of JSON logs on user activity on the app, as well as a directory with JSON metadata on the songs in their app.
+> A music streaming company, Sparkify, has decided that it is time to introduce more automation and monitoring to their data warehouse ETL pipelines and come to the conclusion that the best tool to achieve this is Apache Airflow.
 >
-> As their data engineer, you are tasked with building an ETL pipeline that extracts their data from S3, processes them using Spark, and loads the data back into S3 as a set of dimensional tables. This will allow their analytics team to continue finding insights in what songs their users are listening to.
+>They have decided to bring you into the project and expect you to create high grade data pipelines that are dynamic and built from reusable tasks, can be monitored, and allow easy backfills. They have also noted that the data quality plays a big part when analyses are executed on top the data warehouse and want to run tests against their datasets after the ETL steps have been executed to catch any discrepancies in the datasets.
 >
-> You'll be able to test your database and ETL pipeline by running queries given to you by the analytics team from Sparkify and compare your results with their expected results.
+>The source data resides in S3 and needs to be processed in Sparkify's data warehouse in Amazon Redshift. The source datasets consist of JSON logs that tell about user activity in the application and JSON metadata about the songs the users listen to.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 ### Goal
 
-The goal of this project is to apply what I have learned on Spark and data lakes to build an ETL pipeline for a data lake hosted on S3. Data will be loaded from an S3 bucket, processed into dimensional and fact tables and stored into another S3 bucket.
+The goal of this project is to apply what I have learned on Apache Airflow to create my own custom operators to perform tasks such as staging the data, filling the data warehouse, and running checks on the data as the final step. The final airflow DAG should look similar to the image below.
+
+![Airflow DAG](images/example-dag.png)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 ### Data
 
-Data is stored in an S3 bucket:
+Data is stored in an S3 bucket in `us-west-2`:
 
 - **Song data**: `s3://udacity-dend/song_data`
 - **Log data**: `s3://udacity-dend/log_data`
-
-Log data json path: `s3://udacity-dend/log_json_path.json`
 
 #### The song dataset
 
@@ -77,7 +77,6 @@ For example, this is how the first file (`TRAAAAW128F429D538.json`) looks like:
   "duration": 218.93179,
   "year": 0
 }
-
 ```
 
 #### Log dataset
@@ -107,7 +106,6 @@ The log files are named following a date pattern (`{year}_{month}_{day}_events.j
   "userAgent": "\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.143 Safari/537.36\"",
   "userId": "39"
 }
-
 ```
 
 <p align="right">(<a href="#top">back to top</a>)</p>
@@ -145,10 +143,10 @@ Install environment using provided file:
 
 ```bash
 mamba env create -f environment.yml # alternatively use environment_core.yml if base system is not debian
-mamba activate sparkify_spark
+mamba activate sparkify_airflow
 ```
 
-### Setting up an Amazon EMR cluster
+### Setting up an Amazon Redshift cluster
 
 **Create an IAM user:**
 
@@ -156,7 +154,7 @@ mamba activate sparkify_spark
   2. Go to [AWS IAM service](https://console.aws.amazon.com/iam/home#/users) and click on the "**Add user**" button to create a new IAM user in your AWS account.
   3. Choose a name of your choice.
   4. Select "**Programmatic access**" as the access type. Click Next.
-  5. Choose the **Attach existing policies directly tab**, and select the "**AdministratorAccess**" (<span style="color:red;font-weight:bold">Only for testing purposes!</span>). Click Next.
+  5. Choose the **Attach existing policies directly tab**, and select the "**AdministratorAccess**". Click Next.
   6. Skip adding any tags. Click Next.
   7. Review and create the user. It will show you a pair of access key ID and secret.
   8. Take note of the pair of access key ID and secret. This pair is collectively known as Access key.
@@ -165,31 +163,32 @@ mamba activate sparkify_spark
 
   1. Create a new file, `_user.cfg`, and add the following:
 
-   ```bash
-   AWS_ACCESS_KEY_ID = <YOUR_AWS_KEY>
-   AWS_SECRET_ACCESS_KEY = <YOUR_AWS_SECRET>
-   ```
+      ```bash
+      AWS_ACCESS_KEY_ID = <YOUR_AWS_KEY>
+      AWS_SECRET_ACCESS_KEY = <YOUR_AWS_SECRET>
+      ```
 
   2. This file will be loaded internally to connect to AWS and perform various operations.
   3. **DO NOT SHARE THIS FILE WITH ANYONE!** I recommend adding this file to .gitignore to avoid accidentally pushing it to a git repository: `printf "\n_user.cfg\n" >> .gitignore`.
 
 **Create cluster:**
 
-Since the python scripts that are part of this project are meant to be run within an EMR cluster, the easiest way is to create the EMR cluster using the AWS UI. Check this [great guide](https://hands-on.cloud/working-with-emr-in-python-using-boto3/) on how to do it using boto3.
-
-Create cluster with the following settings (using advanced options):
-
-- **Release**: emr-6.8.0 or later.
-- **Applications**: Hadoop 3.2.1, JupyterEnterpriseGateway 2.1.0, and Spark 3.3.0 (or later versions).
-- **Instance type**: m3.xlarge.
-- **Number of instances**: 3.
-- **EC2 key pair**: Proceed without an EC2 key pair or feel free to use one if you'd like to.
-
-It is a good idea to set cluster auto-termination on (e.g. to one hour after being idle).
+  1. Fill the `dwh.cfg` configuration file. These are the basic parameters that will be used to operate on AWS. More concretely, `GENERAL` covers general parameters, `DWH` includes the necessary information to create and connect to the Redshift cluster and S3 contains information on where to find the source dataset for this project. *This file is already filled with example values*.
+  2. To create the Redshift cluster, either run the `create_dwh.py` python script or follow along the notebook `notebooks/main.ipynb`.
 
 <span style="color:red;font-weight:bold">DO NOT FORGET TO TERMINATE YOUR CLUSTER WHEN FINISHED WORKING ON THE PROJECT TO AVOID UNWANTED COSTS!</span>
 
-## Usage
+### Setting up an Airflow server (local)
+
+To start a local Apache Airflow server for the purposes of this project, simply run the following:
+
+```bash
+bash start_airflow.sh
+```
+
+Introduce your desired password when prompted and then access the UI at `localhost:8080` with user `admin` and the password you just created.
+
+## TODO: Usage
 
 Project structure:
 
