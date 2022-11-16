@@ -13,7 +13,7 @@ from airflow.operators.empty import EmptyOperator
 #   https://stackoverflow.com/questions/69086208/programatically-set-connections-variables-in-airflow
 
 default_args = {
-    "owner": "udacity",
+    "owner": "Sparkify",
     "start_date": datetime(2019, 1, 12),
 }
 
@@ -27,12 +27,20 @@ dag = DAG(
 start_operator = EmptyOperator(task_id="Begin_execution", dag=dag)
 
 
-# stage events
+# 1. stage events
 # S3ToRedshiftOperator()
 
-# stage songs
+# 1. stage songs
 # S3ToRedshiftOperator()
 
+# 2. Load songplays
+# RedshiftSQLOperator()
+
+# 3. Load users, song, etc. (one task each)
+# RedshiftSQLOperator()
+
+# 4. Data quality on all loaded tables
+# one task for each table to be checked!
 
 # load_songplays_table = LoadFactOperator(task_id="Load_songplays_fact_table", dag=dag)
 
