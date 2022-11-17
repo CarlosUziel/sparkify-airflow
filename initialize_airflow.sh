@@ -15,18 +15,23 @@ export AIRFLOW__CORE__PLUGINS_FOLDER
 AIRFLOW__CORE__LOAD_EXAMPLES=False
 export AIRFLOW__CORE__LOAD_EXAMPLES
 
+AIRFLOW__DATABASE__LOAD_DEFAULT_CONNECTIONS=False
+export AIRFLOW__DATABASE__LOAD_DEFAULT_CONNECTIONS
+
+# reset
+killall airflow
+rm -rf "$AIRFLOW_HOME"
+
 # initialize the database
-if [ ! -d "$AIRFLOW_HOME" ]
-then
-    airflow db init
-    
-    airflow users create \
-    --username admin \
-    --firstname Jon \
-    --lastname Snow \
-    --role Admin \
-    --email john@snow.org
-fi
+airflow db init
+
+airflow users create \
+--username admin \
+--firstname Jon \
+--lastname Snow \
+--role Admin \
+--email john@snow.org
+
 
 # start the web server, default port is 8080
 airflow webserver --daemon --port 8080
