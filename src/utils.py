@@ -10,6 +10,15 @@ import psycopg2
 from airflow import settings
 from airflow.models import Connection
 
+from sql_queries import (
+    STAGING_TABLES,
+    STAR_TABLES,
+    STAR_TABLES_CONSTRAINTS,
+    STAR_TABLES_DISTSTYLES,
+    get_create_table_query,
+    get_drop_table_query,
+)
+
 
 def process_config(config_path: Path) -> ConfigParser:
     """Process a single configuration file."""
@@ -52,13 +61,16 @@ def create_attach_role(iam_client: Any, dwh_config: ConfigParser) -> str:
             ),
         )
     except Exception as e:
-        logging.warn(e)
+        logging.error(e)
 
     # 2. Attach role
-    iam_client.attach_role_policy(
-        RoleName=dwh_config.get("DWH", "DWH_IAM_ROLE_NAME"),
-        PolicyArn="arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
-    )["ResponseMetadata"]["HTTPStatusCode"]
+    try:
+        iam_client.attach_role_policy(
+            RoleName=dwh_config.get("DWH", "DWH_IAM_ROLE_NAME"),
+            PolicyArn="arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+        )["ResponseMetadata"]["HTTPStatusCode"]
+    except Exception as e:
+        logging.error(e)
 
     # 3. Return IAM role ARN
     return iam_client.get_role(RoleName=dwh_config.get("DWH", "DWH_IAM_ROLE_NAME"))[
@@ -117,8 +129,8 @@ def open_db_port(user_config: ConfigParser, dwh_config: ConfigParser):
     # 1. Get EC2 client
     ec2 = boto3.resource(
         "ec2",
-        aws_access_key_id=user_config.get("AWS", "KEY"),
-        aws_secret_access_key=user_config.get("AWS", "SECRET"),
+        aws_access_key_id=user_config.get("AWS", "AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=user_config.get("AWS", "AWS_SECRET_ACCESS_KEY"),
         region_name=dwh_config.get("GENERAL", "REGION"),
     )
 
@@ -136,6 +148,38 @@ def open_db_port(user_config: ConfigParser, dwh_config: ConfigParser):
         )
     except Exception as e:
         print(e)
+
+
+def get_db_connection(dwh_config: ConfigParser):
+    """Get database connection and cursor objects"""
+    conn = psycopg2.connect(
+        f"host={dwh_config.get('DWH', 'DWH_ENDPOINT')} "
+        f"dbname={dwh_config.get('DWH', 'DWH_DB')} "
+        f"user={dwh_config.get('DWH', 'DWH_DB_USER')} "
+        f"password={dwh_config.get('DWH', 'DWH_DB_PASSWORD')} "
+        f"port={dwh_config.get('DWH', 'DWH_DB_PORT')} "
+    )
+    cur = conn.cursor()
+    return conn, cur
+
+
+def drop_tables(cur: Any, conn: Any):
+    """Drop staging, fact and dimension tables"""
+    for table_name in [*STAR_TABLES.keys(), *STAGING_TABLES.keys()]:
+        cur.execute(get_drop_table_query(table_name))
+        conn.commit()
+
+
+def create_tables(cur: Any, conn: Any):
+    """Create staging, fact and dimension tables"""
+    for table_name, table_args in [*STAR_TABLES.items(), *STAGING_TABLES.items()]:
+        cur.execute(
+            get_create_table_query(
+                table_name, [*table_args, *STAR_TABLES_CONSTRAINTS.get(table_name, [])]
+            )
+            + f" {STAR_TABLES_DISTSTYLES.get(table_name, '')}"
+        )
+        conn.commit()
 
 
 def delete_cluster(redshift_client: Any, dwh_config: ConfigParser):
@@ -182,5 +226,9 @@ def register_connection(**kwargs):
     """Register Airflow connection"""
     conn = Connection(**kwargs)
     session = settings.Session()
-    session.add(conn)
-    session.commit()
+    try:
+        session.add(conn)
+        session.commit()
+    except Exception as e:
+        logging.error(e)
+        session.rollback()
