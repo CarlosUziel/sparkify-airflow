@@ -1,6 +1,5 @@
 from __future__ import absolute_import, division, print_function
 
-import helpers
 import operators
 from airflow.plugins_manager import AirflowPlugin
 
@@ -11,4 +10,3 @@ class SparkifyPlugin(AirflowPlugin):
     operators = [
         operators.DataQualityOperator,
     ]
-    helpers = [helpers.SqlQueries]
