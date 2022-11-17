@@ -1,13 +1,31 @@
+import json
+import logging
+import os
+import warnings
 from pathlib import Path
 
 import boto3
+import psycopg2
+from rich import traceback
 
 from utils import (
     create_attach_role,
     create_redshift_cluster,
+    create_tables,
+    drop_tables,
+    get_db_connection,
     open_db_port,
     process_config,
     register_connection,
+)
+
+_ = traceback.install()
+logging.basicConfig(force=True)
+logging.getLogger().setLevel(logging.INFO)
+warnings.filterwarnings("ignore")
+
+os.environ["AIRFLOW_HOME"] = str(
+    Path(__file__).parents[1].joinpath("_airflow").resolve()
 )
 
 
@@ -23,8 +41,8 @@ def main():
     iam_client, redshift_client = [
         boto3.client(
             client,
-            aws_access_key_id=user_config.get("AWS", "KEY"),
-            aws_secret_access_key=user_config.get("AWS", "SECRET"),
+            aws_access_key_id=user_config.get("AWS", "AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=user_config.get("AWS", "AWS_SECRET_ACCESS_KEY"),
             region_name=dwh_config.get("GENERAL", "REGION"),
         )
         for client in ("iam", "redshift")
@@ -49,10 +67,27 @@ def main():
     # 1.5. Open TCP port
     open_db_port(user_config, dwh_config)
 
+    # 1.6. Drop/create empty tables
+    conn, cur = get_db_connection(dwh_config)
+    try:
+        drop_tables(cur, conn)
+        create_tables(cur, conn)
+    except psycopg2.Error as e:
+        logging.error(f"Error dropping/creating tables: \n{e}")
+    conn.close()
+
     # 2. Airflow
-    # 2.1. Save Redshift connection
+    # 2.1. Save AWS connection
     register_connection(
-        conn_id="redshift",
+        conn_id="aws_credentials",
+        conn_type="Amazon Web Services",
+        login=dwh_config.get("DWH", "DWH_DB_USER"),
+        password=dwh_config.get("DWH", "DWH_DB_PASSWORD"),
+    )
+
+    # 2.2. Save Redshift connection
+    register_connection(
+        conn_id="aws_redshift",
         conn_type="Amazon Redshift",
         host=dwh_config.get("DWH", "DWH_ENDPOINT"),
         schema=dwh_config.get("DWH", "DWH_DB"),
@@ -64,5 +99,5 @@ def main():
     return cluster_props, redshift_client, iam_client
 
 
-if __name__ == "__main":
+if __name__ == "__main__":
     main()
