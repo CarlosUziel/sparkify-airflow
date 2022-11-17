@@ -1,40 +1,55 @@
 from datetime import datetime
+from pathlib import Path
 
 from airflow import DAG
 from airflow.operators.empty import EmptyOperator
+from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
 
-# amazon aws provider reference:
-#   https://github.com/apache/airflow/tree/main/airflow/providers/amazon/aws
+from sql_queries import STAGING_TABLES
+from utils import process_config
 
-# AWS_KEY = os.environ.get('AWS_KEY')
-# AWS_SECRET = os.environ.get('AWS_SECRET')
-
-# set variables/connections programatically:
-#   https://stackoverflow.com/questions/69086208/programatically-set-connections-variables-in-airflow
+user_config, dwh_config = (
+    process_config(Path(__file__).parents[2].joinpath("_user.cfg")),
+    process_config(Path(__file__).parents[2].joinpath("dwh.cfg")),
+)
 
 default_args = {
     "owner": "Sparkify",
-    "start_date": datetime(2019, 1, 12),
+    "start_date": datetime(2022, 11, 1),
 }
 
 dag = DAG(
     "SPARKIFY_S3_to_Redshift",
     default_args=default_args,
     description="Load and transform data in Redshift with Airflow",
-    schedule_interval="0 * * * *",
+    schedule_interval="@monthly",
 )
 
 start_operator = EmptyOperator(task_id="Begin_execution", dag=dag)
 
 
-# 1. stage events
-# S3ToRedshiftOperator()
+# 1. Staging tables
+stage_tables_tasks = {
+    table_name: S3ToRedshiftOperator(
+        task_id=f"stage_{table_name.split('_')[-1]}",
+        dag=dag,
+        schema=dwh_config.get("DWH", "DWH_DB"),
+        table=table_name,
+        s3_bucket=dwh_config.get("S3", "BUCKET_NAME"),
+        s3_key=dwh_config.get(
+            "S3", table_name.split("_")[-1]
+        ),  # assign from a task factory
+        redshift_conn_id="aws_redshift",
+        aws_conn_id="aws_credentials",
+        column_list=[col.split(" ")[0] for col in table_args],
+        autocommit=True,
+        method="REPLACE",
+    )
+    for table_name, table_args in STAGING_TABLES.items()
+}
 
-# 1. stage songs
-# S3ToRedshiftOperator()
-
-# 2. Load songplays
-# RedshiftSQLOperator()
+for task in stage_tables_tasks.values():
+    start_operator.set_downstream(task)
 
 # 3. Load users, song, etc. (one task each)
 # RedshiftSQLOperator()
