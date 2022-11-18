@@ -9,4 +9,6 @@ class SparkifyPlugin(AirflowPlugin):
     name = "sparkify_plugin"
     operators = [
         operators.DataQualityOperator,
+        operators.LoadDimensionOperator,
+        operators.LoadFactOperator,
     ]
