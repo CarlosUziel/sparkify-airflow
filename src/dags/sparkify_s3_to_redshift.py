@@ -3,10 +3,11 @@ from pathlib import Path
 
 from airflow import DAG
 from airflow.operators.empty import EmptyOperator
-from airflow.providers.amazon.aws.operators.redshift_sql import RedshiftSQLOperator
 from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
 
 from plugins.operators.data_quality import DataQualityOperator
+from plugins.operators.load_dimension import LoadDimensionOperator
+from plugins.operators.load_fact import LoadFactOperator
 from sql_queries import STAGING_TABLES, STAR_TABLES, STAR_TABLES_INSERTS
 from utils import process_config
 
@@ -86,7 +87,7 @@ for task in check_stage_tables_tasks.values():
 
 # 3. Populate dim tables
 insert_dim_tables = {
-    table_name: RedshiftSQLOperator(
+    table_name: LoadDimensionOperator(
         task_id=f"insert_{table_name}",
         dag=dag,
         redshift_conn_id="aws_redshift",
@@ -119,7 +120,7 @@ for task in check_dim_tables.values():
 
 # 5. Insert facts tables
 insert_fact_tables = {
-    table_name: RedshiftSQLOperator(
+    table_name: LoadFactOperator(
         task_id=f"insert_{table_name}",
         dag=dag,
         redshift_conn_id="aws_redshift",
