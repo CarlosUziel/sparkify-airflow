@@ -1,8 +1,11 @@
-import json
 import logging
 import os
 import warnings
 from pathlib import Path
+
+os.environ["AIRFLOW_HOME"] = str(
+    Path(__file__).parents[1].joinpath("_airflow").resolve()
+)
 
 import boto3
 import psycopg2
@@ -23,10 +26,6 @@ _ = traceback.install()
 logging.basicConfig(force=True)
 logging.getLogger().setLevel(logging.INFO)
 warnings.filterwarnings("ignore")
-
-os.environ["AIRFLOW_HOME"] = str(
-    Path(__file__).parents[1].joinpath("_airflow").resolve()
-)
 
 
 def main():
@@ -81,8 +80,8 @@ def main():
     register_connection(
         conn_id="aws_credentials",
         conn_type="Amazon Web Services",
-        login=dwh_config.get("DWH", "DWH_DB_USER"),
-        password=dwh_config.get("DWH", "DWH_DB_PASSWORD"),
+        login=user_config.get("AWS", "AWS_ACCESS_KEY_ID"),
+        password=user_config.get("AWS", "AWS_SECRET_ACCESS_KEY"),
     )
 
     # 2.2. Save Redshift connection
