@@ -3,24 +3,24 @@ from typing import Dict, Iterable
 
 STAGING_TABLES: OrderedDict[str, Iterable[str]] = OrderedDict(
     staging_events=(
-        "artist varchar(256)",
+        "artist_name varchar(256)",
         "auth varchar(256)",
-        "firstname varchar(256)",
+        "first_name varchar(256)",
         "gender varchar(256)",
-        "iteminsession int4",
-        "lastname varchar(256)",
+        "item_session int4",
+        "last_name varchar(256)",
         "length numeric(18,0)",
         "level varchar(256)",
         "location varchar(256)",
         "method varchar(256)",
         "page varchar(256)",
         "registration numeric(18,0)",
-        "sessionid int4",
+        "session_id int4",
         "song varchar(256)",
         "status int4",
         "ts int8",
-        "useragent varchar(256)",
-        "userid int4",
+        "user_agent varchar(256)",
+        "user_id int4",
     ),
     staging_songs=(
         "num_songs int4",
@@ -37,21 +37,21 @@ STAGING_TABLES: OrderedDict[str, Iterable[str]] = OrderedDict(
 )
 STAR_TABLES: OrderedDict[str, Iterable[str]] = OrderedDict(
     dim_songs=(
-        "songid varchar(256) NOT NULL",
+        "song_id varchar(256) NOT NULL",
         "title varchar(256)",
-        "artistid varchar(256)",
+        "artist_id varchar(256)",
         "year int4",
         "duration numeric(18,0)",
     ),
     dim_artists=(
-        "artistid varchar(256) NOT NULL",
+        "artist_id varchar(256) NOT NULL",
         "name varchar(256)",
         "location varchar(256)",
-        "lattitude numeric(18,0)",
+        "latitude numeric(18,0)",
         "longitude numeric(18,0)",
     ),
     dim_users=(
-        "userid int4 NOT NULL",
+        "user_id int4 NOT NULL",
         "first_name varchar(256)",
         "last_name varchar(256)",
         "gender varchar(256)",
@@ -67,39 +67,39 @@ STAR_TABLES: OrderedDict[str, Iterable[str]] = OrderedDict(
         "weekday varchar(256)",
     ),
     fact_songplays=(
-        "playid varchar(32) NOT NULL",
+        "play_id varchar(32) NOT NULL",
         "start_time timestamp NOT NULL",
-        "userid int4 NOT NULL",
+        "user_id int4 NOT NULL",
         "level varchar(256)",
-        "songid varchar(256)",
-        "artistid varchar(256)",
-        "sessionid int4",
+        "song_id varchar(256)",
+        "artist_id varchar(256)",
+        "session_id int4",
         "location varchar(256)",
         "user_agent varchar(256)",
     ),
 )
 STAR_TABLES_CONSTRAINTS: Dict[str, Iterable[str]] = {
-    "dim_songs": ("CONSTRAINT songs_pkey PRIMARY KEY (songid)",),
-    "dim_users": ("CONSTRAINT users_pkey PRIMARY KEY (userid)",),
-    "dim_artists": ("CONSTRAINT artists_pkey PRIMARY KEY (artistid)",),
+    "dim_songs": ("CONSTRAINT songs_pkey PRIMARY KEY (song_id)",),
+    "dim_users": ("CONSTRAINT users_pkey PRIMARY KEY (user_id)",),
+    "dim_artists": ("CONSTRAINT artists_pkey PRIMARY KEY (artist_id)",),
     "dim_time": ("CONSTRAINT time_pkey PRIMARY KEY (start_time)",),
     "fact_songplays": (
-        "CONSTRAINT songplays_pkey PRIMARY KEY (playid)",
+        "CONSTRAINT songplays_pkey PRIMARY KEY (play_id)",
         (
             "CONSTRAINT FK_songplays_time FOREIGN KEY(start_time) REFERENCES "
             "dim_time(start_time)"
         ),
         (
-            "CONSTRAINT FK_songplays_users FOREIGN KEY(userid) REFERENCES "
-            "dim_users(userid)"
+            "CONSTRAINT FK_songplays_users FOREIGN KEY(user_id) REFERENCES "
+            "dim_users(user_id)"
         ),
         (
-            "CONSTRAINT FK_songplays_songs FOREIGN KEY(songid) REFERENCES "
-            "dim_songs(songid)"
+            "CONSTRAINT FK_songplays_songs FOREIGN KEY(song_id) REFERENCES "
+            "dim_songs(song_id)"
         ),
         (
-            "CONSTRAINT FK_songplays_artists FOREIGN KEY(artistid) REFERENCES "
-            "dim_artists(artistid)"
+            "CONSTRAINT FK_songplays_artists FOREIGN KEY(artist_id) REFERENCES "
+            "dim_artists(artist_id)"
         ),
     ),
 }
@@ -136,7 +136,7 @@ STAR_TABLES_INSERTS: Dict[str, str] = OrderedDict(
     """,
     dim_artists="""
         INSERT INTO
-            dim_artists (artistid, name, location, latitude, longitude)
+            dim_artists (artist_id, name, location, latitude, longitude)
         SELECT DISTINCT
             artist_id,
             artist_name,
@@ -150,7 +150,7 @@ STAR_TABLES_INSERTS: Dict[str, str] = OrderedDict(
     """,
     dim_songs="""
         INSERT INTO
-            dim_songs (songid, title, artist_id, year, duration)
+            dim_songs (song_id, title, artist_id, year, duration)
         SELECT DISTINCT
             song_id, title, artist_id, year, duration
         FROM
@@ -160,36 +160,36 @@ STAR_TABLES_INSERTS: Dict[str, str] = OrderedDict(
     """,
     dim_users="""
         INSERT INTO
-            dim_users (userid, first_name, last_name, gender, level)
+            dim_users (user_id, first_name, last_name, gender, level)
         SELECT DISTINCT
-            userid, firstname, lastname, gender, level
+            user_id, first_name, last_name, gender, level
         FROM
             staging_events
         WHERE
-            userid IS NOT NULL
+            user_id IS NOT NULL
     """,
     fact_songplays="""
         INSERT INTO
             fact_songplays
-            (playid,
+            (play_id,
             start_time,
-            userid,
+            user_id,
             level,
-            songid,
-            artistid,
-            sessionid,
+            song_id,
+            artist_id,
+            session_id,
             location,
             user_agent)
         SELECT DISTINCT
-            md5(events.sessionid || events.start_time) AS playid,
+            md5(e.session_id || e.start_time) AS play_id,
             e.start_time,
-            e.userId,
+            e.user_id,
             e.level,
             s.song_id,
-            e.artist_id,
-            e.sessionId,
+            s.artist_id,
+            e.session_id,
             e.location,
-            e.userAgent
+            e.user_agent
         FROM
             (
             SELECT
@@ -201,12 +201,11 @@ STAR_TABLES_INSERTS: Dict[str, str] = OrderedDict(
             ) e
         JOIN
             staging_songs s
-            ON e.song = s.title
-            AND e.artist = s.artist_name
-            AND e.length = s.duration
+        ON
+            e.song = s.title AND e.artist_name = s.artist_name AND e.length = s.duration
         WHERE
-            e.ts IS NOT NULL AND e.userId IS NOT NULL
-            AND s.song_id IS NOT NULL AND e.artist_id IS NOT NULL
+            e.ts IS NOT NULL AND e.user_id IS NOT NULL
+            AND s.song_id IS NOT NULL AND e.artist_name IS NOT NULL
     """,
 )
 
