@@ -16,7 +16,8 @@
       <a href="#getting-started">Getting Started</a>
       <ul>
         <li><a href="#setting-up-a-conda-environment">Setting up a conda environment</a></li>
-        <li><a href="#setting-up-an-amazon-emr-cluster">Setting up an Amazon EMR cluster</a></li>
+        <li><a href="#setting-up-a-local-apache-airflow-server">Setting up a local Apache Airflow server</a></li>
+        <li><a href="#setting-up-an-amazon-redshift-cluster">Setting up an Amazon Redshift cluster</a></li>
       </ul>
     </li>
     <li><a href="#usage">Usage</a></li>
@@ -47,7 +48,7 @@ A project from the [Data Engineer Nanodegree Program at Udacity](https://www.uda
 
 The goal of this project is to apply what I have learned on Apache Airflow to create my own custom operators to perform tasks such as staging the data, filling the data warehouse, and running checks on the data as the final step. The final airflow DAG should look similar to the image below.
 
-![Airflow DAG](images/example-dag.png)
+![Airflow DAG](images/dag.png)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -112,7 +113,7 @@ The log files are named following a date pattern (`{year}_{month}_{day}_events.j
 
 ### Data Schema
 
-The new tables follow a star schema that is better visualized through an Entity Relationship Diagram (ERD). The following image shows the ERD of an example PostreSQL database with the final tables defined.
+The new tables follow a star schema that is better visualized through an Entity Relationship Diagram (ERD). The following image shows the ERD of an example PostgreSQL database with the final tables defined.
 
 ![Sparkify ERD](images/ERD.png)
 
@@ -146,6 +147,16 @@ mamba env create -f environment.yml # alternatively use environment_core.yml if 
 mamba activate sparkify_airflow
 ```
 
+### Setting up a local Apache Airflow server
+
+To start a local Apache Airflow server for the purposes of this project, simply run the following:
+
+```bash
+bash initialize_airflow.sh
+```
+
+Introduce your desired password when prompted and then access the UI at `localhost:8080` with user `admin` and the password you just created.
+
 ### Setting up an Amazon Redshift cluster
 
 **Create an IAM user:**
@@ -174,36 +185,27 @@ mamba activate sparkify_airflow
 **Create cluster:**
 
   1. Fill the `dwh.cfg` configuration file. These are the basic parameters that will be used to operate on AWS. More concretely, `GENERAL` covers general parameters, `DWH` includes the necessary information to create and connect to the Redshift cluster and S3 contains information on where to find the source dataset for this project. *This file is already filled with example values*.
-  2. To create the Redshift cluster, either run the `setup.py` python script or follow along the notebook `notebooks/main.ipynb`.
+  2. To create the Redshift cluster, simply run the `setup.py` python script (must be done after `initialize_airflow.sh`, since registration of connections is also taking place in `setup.py`).
 
-<span style="color:red;font-weight:bold">DO NOT FORGET TO TERMINATE YOUR CLUSTER WHEN FINISHED WORKING ON THE PROJECT TO AVOID UNWANTED COSTS!</span>
+<span style="color:red;font-weight:bold">*DO NOT FORGET TO TERMINATE YOUR REDSHIFT CLUSTER WHEN FINISHED WORKING ON THE PROJECT TO AVOID UNWANTED COSTS!*</span>
 
-### Setting up an Airflow server (local)
+<p align="right">(<a href="#top">back to top</a>)</p>
 
-To start a local Apache Airflow server for the purposes of this project, simply run the following:
-
-```bash
-bash start_airflow.sh
-```
-
-Introduce your desired password when prompted and then access the UI at `localhost:8080` with user `admin` and the password you just created.
-
-## TODO: Usage
+## Usage
 
 Project structure:
 
-- `notebooks`: contains the main Jupyter notebook to run the project (`notebooks/main.ipynb`).
-- `src`: contains the source files and scripts to build and populate the Data Lake.
+- `src/dags`: Airflow dags.
+- `src/plugins`: Airflow custom plugins and operators.
+- `src/*.py`: Utility scripts and functions.
 
-Ensure you have set the `PYTHONPATH` environment variable as needed (e.g., `PYTHONPATH=~/sparkify_spark/src`)
+Ensure you have set the `PYTHONPATH` environment variable as needed (e.g., `PYTHONPATH=~/sparkify_airflow/src`)
 
 The whole project can be run as follows:
 
 ```bash
-python src/etl.py
+bash initialize_airflow.sh && python src/setup.py
 ```
-
-Alternatively, follow along `notebooks/main.ipynb`.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
