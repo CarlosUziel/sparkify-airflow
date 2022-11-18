@@ -3,9 +3,11 @@ from pathlib import Path
 
 from airflow import DAG
 from airflow.operators.empty import EmptyOperator
+from airflow.providers.amazon.aws.operators.redshift_sql import RedshiftSQLOperator
 from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
 
-from sql_queries import STAGING_TABLES
+from plugins.operators.data_quality import DataQualityOperator
+from sql_queries import STAGING_TABLES, STAR_TABLES, STAR_TABLES_INSERTS
 from utils import process_config
 
 user_config, dwh_config = (
@@ -25,15 +27,15 @@ dag = DAG(
     schedule_interval="@monthly",
 )
 
-start_operator = EmptyOperator(task_id="Begin_execution", dag=dag)
-
+# 0. Start
+start_operator = EmptyOperator(task_id="begin_execution", dag=dag)
 
 # 1. Staging tables
 stage_tables_tasks = {
     table_name: S3ToRedshiftOperator(
-        task_id=f"stage_{table_name.split('_')[-1]}",
+        task_id=f"load_{table_name}",
         dag=dag,
-        schema=dwh_config.get("DWH", "DWH_DB"),
+        schema="public",
         table=table_name,
         s3_bucket=dwh_config.get("S3", "BUCKET_NAME"),
         s3_key=dwh_config.get(
@@ -42,6 +44,14 @@ stage_tables_tasks = {
         redshift_conn_id="aws_redshift",
         aws_conn_id="aws_credentials",
         column_list=[col.split(" ")[0] for col in table_args],
+        copy_options=[
+            "FORMAT JSON "
+            + (
+                f"AS '{dwh_config.get('S3', 'log_jsonpath')}'"
+                if table_name == "staging_events"
+                else "AS 'auto'"
+            ),
+        ],
         autocommit=True,
         method="REPLACE",
     )
@@ -51,32 +61,86 @@ stage_tables_tasks = {
 for task in stage_tables_tasks.values():
     start_operator.set_downstream(task)
 
-# 3. Load users, song, etc. (one task each)
-# RedshiftSQLOperator()
+# 1.1. Check that staging tables are not empty
+check_stage_tables_tasks = {
+    table_name: DataQualityOperator(
+        task_id=f"check_{table_name}",
+        dag=dag,
+        conn_id="aws_redshift",
+        table=table_name,
+    )
+    for table_name in STAGING_TABLES.keys()
+}
 
-# 4. Data quality on all loaded tables
-# one task for each table to be checked!
+for table_name, task in check_stage_tables_tasks.items():
+    stage_tables_tasks[table_name].set_downstream(task)
 
-# load_songplays_table = LoadFactOperator(task_id="Load_songplays_fact_table", dag=dag)
+# 2. Loaded staging
+mid_operator = EmptyOperator(task_id="staging_ready", dag=dag)
+for task in check_stage_tables_tasks.values():
+    mid_operator.set_upstream(task)
 
-# load_user_dimension_table = LoadDimensionOperator(
-#     task_id="Load_user_dim_table", dag=dag
-# )
+# 3. Populate dim tables
+insert_dim_tables = {
+    table_name: RedshiftSQLOperator(
+        task_id=f"insert_{table_name}",
+        dag=dag,
+        redshift_conn_id="aws_redshift",
+        sql=table_insert_sql,
+    )
+    for table_name, table_insert_sql in STAR_TABLES_INSERTS.items()
+    if "dim" in table_name
+}
+for task in insert_dim_tables.values():
+    mid_operator.set_downstream(task)
 
-# load_song_dimension_table = LoadDimensionOperator(
-#     task_id="Load_song_dim_table", dag=dag
-# )
+# 3.1. Data quality on all dim tables
+check_dim_tables = {
+    table_name: DataQualityOperator(
+        task_id=f"check_{table_name}",
+        dag=dag,
+        conn_id="aws_redshift",
+        table=table_name,
+    )
+    for table_name in STAR_TABLES.keys()
+    if "dim" in table_name
+}
+for table_name, task in check_dim_tables.items():
+    insert_dim_tables[table_name].set_downstream(task)
 
-# load_artist_dimension_table = LoadDimensionOperator(
-#     task_id="Load_artist_dim_table", dag=dag
-# )
+# 4. Dim ready
+mid2_operator = EmptyOperator(task_id="dim_ready", dag=dag)
+for task in check_dim_tables.values():
+    task.set_downstream(mid2_operator)
 
-# load_time_dimension_table = LoadDimensionOperator(
-#     task_id="Load_time_dim_table", dag=dag
-# )
+# 5. Insert facts tables
+insert_fact_tables = {
+    table_name: RedshiftSQLOperator(
+        task_id=f"insert_{table_name}",
+        dag=dag,
+        redshift_conn_id="aws_redshift",
+        sql=table_insert_sql,
+    )
+    for table_name, table_insert_sql in STAR_TABLES_INSERTS.items()
+    if "fact" in table_name
+}
+for task in insert_fact_tables.values():
+    mid2_operator.set_downstream(task)
 
-# run_quality_checks = DataQualityOperator(task_id="Run_data_quality_checks", dag=dag)
+# 5.1. Data quality on all dim tables
+check_fact_tables = {
+    table_name: DataQualityOperator(
+        task_id=f"check_{table_name}",
+        dag=dag,
+        conn_id="aws_redshift",
+        table=table_name,
+    )
+    for table_name in STAR_TABLES.keys()
+    if "fact" in table_name
+}
+for table_name, task in check_fact_tables.items():
+    insert_fact_tables[table_name].set_downstream(task)
 
-end_operator = EmptyOperator(task_id="Stop_execution", dag=dag)
-
-start_operator >> end_operator
+end_operator = EmptyOperator(task_id="all_ready", dag=dag)
+for task in check_fact_tables.values():
+    task.set_downstream(end_operator)
