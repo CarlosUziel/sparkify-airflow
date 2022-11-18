@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from airflow import DAG
@@ -17,14 +17,18 @@ user_config, dwh_config = (
 
 default_args = {
     "owner": "Sparkify",
+    "depends_on_past": False,
     "start_date": datetime(2022, 11, 1),
+    "retries": 3,
+    "retry_delay": timedelta(hours=1),
+    "catchup": False,
 }
 
 dag = DAG(
     "SPARKIFY_S3_to_Redshift",
     default_args=default_args,
     description="Load and transform data in Redshift with Airflow",
-    schedule_interval="@monthly",
+    schedule_interval="@hourly",
 )
 
 # 0. Start
