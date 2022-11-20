@@ -24,4 +24,4 @@ class LoadDimensionOperator(RedshiftSQLOperator):
                 autocommit=self.autocommit,
                 parameters=self.parameters,
             )
-        super(LoadDimensionOperator, self).execute()
+        super(LoadDimensionOperator, self).execute(context)
