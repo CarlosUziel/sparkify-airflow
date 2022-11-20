@@ -72,7 +72,13 @@ check_stage_tables_tasks = {
         task_id=f"check_{table_name}",
         dag=dag,
         conn_id="aws_redshift",
-        table=table_name,
+        checks=[
+            {
+                "sql": f"SELECT COUNT(*) FROM {table_name}",
+                "reference_value": 0,
+                "func": (lambda x, y: x > y),
+            }
+        ],
     )
     for table_name in STAGING_TABLES.keys()
 }
@@ -92,6 +98,7 @@ insert_dim_tables = {
         dag=dag,
         redshift_conn_id="aws_redshift",
         sql=table_insert_sql,
+        delete_load=table_name,
     )
     for table_name, table_insert_sql in STAR_TABLES_INSERTS.items()
     if "dim" in table_name
@@ -105,7 +112,13 @@ check_dim_tables = {
         task_id=f"check_{table_name}",
         dag=dag,
         conn_id="aws_redshift",
-        table=table_name,
+        checks=[
+            {
+                "sql": f"SELECT COUNT(*) FROM {table_name}",
+                "reference_value": 0,
+                "func": (lambda x, y: x > y),
+            }
+        ],
     )
     for table_name in STAR_TABLES.keys()
     if "dim" in table_name
@@ -138,7 +151,13 @@ check_fact_tables = {
         task_id=f"check_{table_name}",
         dag=dag,
         conn_id="aws_redshift",
-        table=table_name,
+        checks=[
+            {
+                "sql": f"SELECT COUNT(*) FROM {table_name}",
+                "reference_value": 0,
+                "func": (lambda x, y: x > y),
+            }
+        ],
     )
     for table_name in STAR_TABLES.keys()
     if "fact" in table_name
